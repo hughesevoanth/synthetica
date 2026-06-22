@@ -12,6 +12,8 @@ Description: Generate privacy-preserving synthetic copies of mixed-type tabular
     preserved without retaining row-level information. Optionally inject
     synthetic phenotype columns with user-specified marginal and effect size on
     a chosen subset of features.
+URL: https://hughesevoanth.github.io/synthetica/, https://github.com/hughesevoanth/synthetica
+BugReports: https://github.com/hughesevoanth/synthetica/issues
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
