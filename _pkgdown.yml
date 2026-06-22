@@ -1,0 +1,46 @@
+url: https://hughesevoanth.github.io/synthetica/
+
+home:
+  title: synthetica
+  description: >
+    Simulate synthetic copies of mixed-type tabular datasets via a Gaussian
+    copula. Preserves marginals and joint correlation structure without
+    retaining row-level information.
+
+template:
+  bootstrap: 5
+  bootswatch: cosmo
+
+navbar:
+  structure:
+    left:  [intro, reference, articles, news]
+    right: [github]
+  components:
+    github:
+      icon: fa-github
+      href: https://github.com/hughesevoanth/synthetica
+      aria-label: GitHub
+
+reference:
+- title: Core simulator
+  desc: The main Gaussian-copula simulator
+  contents:
+  - simulate_dataset
+- title: Designed structure
+  desc: Post-processors that stamp batch or group structure onto synthetic data
+  contents:
+  - add_batch_effect
+  - add_group_effect
+- title: Longitudinal
+  desc: Repeated-measures / panel data
+  contents:
+  - simulate_longitudinal
+
+articles:
+- title: Articles
+  navbar: ~
+  contents:
+  - intro
+  - phenotypes
+  - effects
+  - longitudinal

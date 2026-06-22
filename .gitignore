@@ -1,0 +1,16 @@
+# R session / build artifacts
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rcheck/
+*.tar.gz
+
+# pkgdown rendered site (built & deployed by the GitHub Actions workflow, not committed)
+docs/
+
+# built vignettes
+inst/doc/
+
+# macOS
+.DS_Store

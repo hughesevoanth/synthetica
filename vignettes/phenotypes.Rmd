@@ -1,0 +1,159 @@
+---
+title: "Injecting phenotypes"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Injecting phenotypes}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  fig.width = 7, fig.height = 5, fig.align = "center", dpi = 96
+)
+library(synthetica)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+```
+
+# Inject a synthetic phenotype
+
+Beyond reproducing the input, `simulate_dataset()` can **append new
+synthetic columns** -- *phenotypes* -- each correlated with a chosen subset of
+features at a user-defined effect size. This is useful for generating teaching
+datasets, power analyses, or method benchmarks with a known ground-truth signal.
+
+Each entry of `inject` is a named list describing the trait. The `effect`
+controls how strongly it correlates with its `on` targets, either as a
+standardized `mean_shift` or a target `r_squared` on the latent scale. Three
+phenotype `type`s are supported: `"quantitative"`, `"binary"`, and
+`"categorical"`.
+
+```{r inject-all}
+sim <- simulate_dataset(
+  iris, n = 300, seed = 42, verbose = FALSE,
+  inject = list(
+    # 1. continuous trait, modest effect on every feature
+    rainfall = list(
+      type   = "quantitative", mean = 40, sd = 8,
+      effect = list(kind = "r_squared", min_r2 = 0.35, on = "all")
+    ),
+    # 2. binary trait (case/control), stronger effect on the petals
+    treated = list(
+      type   = "binary", prob = 0.40,
+      effect = list(kind = "r_squared", min_r2 = 0.3,
+                    on = c("Petal.Length", "Petal.Width"))
+    ),
+    # 3. ordinal categorical trait: clay -> sand -> silt gradient
+    soil = list(
+      type   = "categorical",
+      levels = c("clay", "sand", "silt"), probs = c(0.5, 0.3, 0.2),
+      effect = list(kind = "r_squared", min_r2 = 0.3,
+                    on = c("Petal.Length", "Petal.Width"))
+    )
+  )
+)
+
+head(sim$data, 6) |>
+  kable(digits = 2, caption = "iris + three injected phenotypes") |>
+  kable_styling(full_width = FALSE, font_size = 11)
+```
+
+## Variance Explained by Simulated Phenotype
+
+```{r, fig.width = 6, fig.height = 4}
+fit = lm(Petal.Length ~ rainfall + soil + treated, data = sim$data)
+a = anova(fit)
+eta_squared = a[, 2] / sum(a[,2])
+names(eta_squared) = rownames(a)
+barplot(eta_squared[-4], col = c("blue4","green4","brown"), 
+        main = "Variance Explained by Simulated Phenotype", 
+        ylab = "variance explained")
+
+```
+
+
+## Rainfall Correlations
+
+```{r fig.width = 10, fig.height = 8}
+p1 = sim$data |> ggplot(aes(x = rainfall, y = Petal.Length)) +
+  geom_point( aes(color = Species) ) +
+  # geom_smooth(method = "lm", aes(color = Species)) +
+  geom_smooth(method = "lm", formula = 'y ~ x', 
+              color = "grey", se = FALSE, 
+              linetype = "dashed") +
+  theme_bw()
+
+p2 = sim$data |> ggplot(aes(x = soil, y = Petal.Length, fill = soil)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette  = "Set1") +
+  theme_bw()
+
+p3 = sim$data |> 
+  mutate(treated = as.factor(treated)) |>
+  ggplot(aes(x = treated, y = Petal.Length, fill = treated)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette  = "Dark2") +
+  theme_bw()
+
+p1 / (p2 | p3) + plot_layout(heights = c(2,1))
+```
+
+
+## What was realised vs requested
+
+Every injected trait is reproducible bookkeeping in `sim$inject_truth`:
+
+```{r inject-truth}
+data.frame(
+  phenotype        = names(sim$inject_truth),
+  realised_cor     = vapply(sim$inject_truth,
+                            function(it) it$mean_abs_real_cor, numeric(1)),
+  expected_sim_cor = vapply(sim$inject_truth,
+                            function(it) it$expected_sim_cor, numeric(1)),
+  thresholding     = vapply(sim$inject_truth,
+                            function(it) it$binary_sim_factor, numeric(1))
+) |>
+  kable(digits = 3, caption = "Injected phenotype: realised vs expected effect") |>
+  kable_styling(full_width = FALSE, font_size = 11)
+```
+
+## Binary phenotypes: thresholded-normal fidelity
+
+A binary trait is a continuous latent thresholded to 0/1. `synthetica` splices
+that **generating latent** into the copula, so the designed correlation is
+captured exactly -- only a single, predictable thresholding factor
+`phi(c) / sqrt(p(1-p))` remains. `expected_sim_cor` (the latent target times
+that factor) closely predicts the realised point-biserial in the output.
+
+```{r inject-binary-check}
+c(prevalence = mean(sim$data$treated == 1),
+  is_integer = is.integer(sim$data$treated))
+```
+
+## Categorical phenotypes: an ordinal gradient
+
+A `"categorical"` phenotype is an **ordinal** trait: one latent is correlated
+with the targets and cut at the cumulative-probability thresholds of `probs`
+into ordered `levels` (the first level is the low end). Because the relationship
+is ordinal, the feature medians climb monotonically along the levels:
+
+```{r inject-categorical-check}
+prop.table(table(sim$data$soil))                       # ~ .5 / .3 / .2
+tapply(sim$data$Petal.Length, sim$data$soil, median)   # clay < sand < silt
+```
+
+For a *nominal* factor -- where each level perturbs different features in
+different directions, with no ordering -- use `add_group_effect()` (see the
+**Batch & group effects** article). That is applied post-hoc, because a nominal
+factor cannot survive the single-latent copula round-trip.
+
+## Feasibility
+
+Effects are checked for feasibility (`rho' R_X^-1 rho <= 1`). An infeasible
+request -- e.g. a large effect on many mutually-correlated targets -- is scaled
+down to the largest achievable magnitude, with a warning naming requested vs
+achieved.

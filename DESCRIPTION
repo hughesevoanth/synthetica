@@ -1,0 +1,34 @@
+Package: synthetica
+Title: Simulate Synthetic Datasets with Preserved Marginals and Correlation Structure
+Version: 0.1.0
+Authors@R:
+    person(given = "David A.",
+           family = "Hughes",
+           email = "hughes.evoanth@gmail.com",
+           role = c("aut", "cre"))
+Description: Generate privacy-preserving synthetic copies of mixed-type tabular
+    datasets via a Gaussian copula model. Marginal distributions (means, SDs,
+    proportions, missingness) and joint correlation structure of the input are
+    preserved without retaining row-level information. Optionally inject
+    synthetic phenotype columns with user-specified marginal and effect size on
+    a chosen subset of features.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 4.1.0)
+Imports:
+    MASS,
+    Matrix,
+    stats,
+    utils
+Suggests:
+    ggplot2,
+    kableExtra,
+    knitr,
+    patchwork,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    tidyverse
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0
