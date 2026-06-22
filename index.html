@@ -152,7 +152,7 @@
 </h2>
 <p>Any mixed-type <code>data.frame</code> works – numeric, binary, factor, with or without <code>NA</code>s. Here we synthesise the classic <code>iris</code> dataset. Because the three species form well-separated clusters, we fit a <strong>separate copula per species</strong> with <code>stratify_by</code> so the within-species correlation structure is preserved.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">synthetica</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://hughesevoanth.github.io/synthetica/">synthetica</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">syn</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/simulate_dataset.html">simulate_dataset</a></span><span class="op">(</span><span class="va">iris</span>, n <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">iris</span><span class="op">)</span>, seed <span class="op">=</span> <span class="fl">42</span>,</span>
 <span>                        stratify_by <span class="op">=</span> <span class="st">"Species"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
@@ -210,7 +210,15 @@
 <p>MIT (c) David A. Hughes. See <code>LICENSE</code>.</p>
 </div>
 </div>
-  </main><aside class="col-md-3"><div class="license">
+  </main><aside class="col-md-3"><div class="links">
+<h2 data-toc-skip>Links</h2>
+<ul class="list-unstyled">
+<li><a href="https://github.com/hughesevoanth/synthetica/" class="external-link">Browse source code</a></li>
+<li><a href="https://github.com/hughesevoanth/synthetica/issues" class="external-link">Report a bug</a></li>
+</ul>
+</div>
+
+<div class="license">
 <h2 data-toc-skip>License</h2>
 <ul class="list-unstyled">
 <li><a href="LICENSE.html">Full license</a></li>
