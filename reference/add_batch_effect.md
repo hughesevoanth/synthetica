@@ -1,0 +1,172 @@
+# Add a Synthetic Batch Effect to a Dataset
+
+Adds batch labels to a tabular dataset and (optionally) applies
+per-batch shifts – in SD units of each target feature – to simulate
+technical batch effects that are common in metabolomics, proteomics, and
+other 'omics pipelines.
+
+## Usage
+
+``` r
+add_batch_effect(
+  x,
+  n_batches = 4L,
+  shifts = NULL,
+  shift_prob = 0.2,
+  shift_sd = 0.5,
+  reference_batch = 1L,
+  on = "all",
+  proportions = NULL,
+  batch_col = "batch",
+  level_names = NULL,
+  seed = NULL
+)
+```
+
+## Arguments
+
+- x:
+
+  A \`data.frame\` or a \`synthetica_sim\` object (the return value of
+  \[simulate_dataset()\]). When a \`synthetica_sim\` is passed, the
+  modification is applied to its \`\$data\` slot.
+
+- n_batches:
+
+  Integer, the number of batches. Default 4.
+
+- shifts:
+
+  Controls the per-batch mean shift, in \*\*SD units\*\* of each target
+  feature. One of: \* \`NULL\` (default) – all zeros; a batch label is
+  added but feature values are unchanged. \* a numeric vector of length
+  \`n_batches\` – the \*uniform\* model: every target feature in batch
+  \`b\` is shifted by \`shifts\[b\] \* sd(feature)\`. \* the string
+  \`"spike_slab"\` – the \*generative\* model: for each non-reference
+  batch and each target feature, a shift is drawn as \`rbinom(1, 1,
+  shift_prob) \* rnorm(1, 0, shift_sd)\`. See \`shift_prob\` and
+  \`shift_sd\`.
+
+- shift_prob:
+
+  Numeric in \`\[0, 1\]\`, the per-feature probability of being "hit" by
+  a shift under the \`"spike_slab"\` model (the slab weight). Default
+  0.2. Ignored for the uniform model.
+
+- shift_sd:
+
+  Positive numeric, the SD of the slab \`N(0, shift_sd)\` under the
+  \`"spike_slab"\` model, in each feature's SD units. Default 0.5.
+  Ignored for the uniform model.
+
+- reference_batch:
+
+  Integer index of a batch to leave unshifted as a clean anchor under
+  the \`"spike_slab"\` model (the reference you correct \*toward\*).
+  Default \`1L\`. \`NULL\` perturbs all batches. Ignored for the uniform
+  model.
+
+- on:
+
+  One of \`"all"\` (every numeric column), a numeric fraction in \`(0,
+  1\]\` (a random subset of numeric columns), or a character vector of
+  feature names. Categorical and non-numeric columns are ignored.
+
+- proportions:
+
+  Optional numeric vector of length \`n_batches\` summing to 1, giving
+  the relative size of each batch. \`NULL\` (default) means equally
+  sized batches (to within one row).
+
+- batch_col:
+
+  Character, the name of the new column. Must not collide with existing
+  column names. Default \`"batch"\`.
+
+- level_names:
+
+  Optional character vector of length \`n_batches\`. If \`NULL\`
+  (default), levels are \`"batch1"\`, \`"batch2"\`, ...
+
+- seed:
+
+  Optional integer for reproducible batch assignment, target selection
+  (when \`on\` is a fraction), and spike-and-slab shift draws.
+
+## Value
+
+The same type as \`x\`. For a \`data.frame\`: the input with the batch
+column appended and target features shifted, carrying an \`attr(.,
+"batch_effect")\` record. For a \`synthetica_sim\`: the same object with
+\`\$data\` modified and a \`\$batch_effect\` slot recording the
+assignment vector, the realized shift matrix (batches x targets), the
+targets, \`proportions\`, and the model parameters.
+
+## Details
+
+Two shift models are supported. A \*\*uniform\*\* model (pass \`shifts\`
+as a numeric vector of length \`n_batches\`) moves every target feature
+in a batch by the same SD-multiple. A \*\*spike-and-slab\*\* model (pass
+\`shifts = "spike_slab"\`) draws a per-feature shift for each batch so
+that most features are unaffected and a minority are strongly perturbed
+– the realistic, heterogeneous signature of a real batch effect.
+
+This is a small post-processing helper that operates on either a plain
+\`data.frame\` or the output of \[simulate_dataset()\]. It's intended
+for generating teaching/test data with a known batch structure and for
+stress-testing batch-correction methods.
+
+Each row is randomly assigned to a batch. With \`proportions = NULL\`
+the batches are equally sized (trailing rows distributed one-per-batch
+when \`n\` is not divisible by \`n_batches\`); otherwise sizes follow
+\`proportions\` via largest-remainder rounding so they still sum to
+\`n\`. For each target feature \`f\` and batch \`b\`, values are shifted
+by \`shift\[b, f\] \* sd(f, na.rm = TRUE)\`, where \`shift\[b, f\]\`
+comes from the chosen model. NAs are left as NA. Non-numeric columns are
+passed through unchanged.
+
+## See also
+
+\[simulate_dataset()\]
+
+## Examples
+
+``` r
+set.seed(1)
+df <- data.frame(
+  x = rnorm(400, 50, 10),
+  y = rlnorm(400, log(20), 0.5),
+  z = rnorm(400, 0, 1)
+)
+
+# Uniform model: three indistinguishable batches and one with a +0.5 SD
+# shift on every numeric feature.
+df2 <- add_batch_effect(
+  df,
+  n_batches = 4,
+  shifts    = c(0.00, 0.05, -0.05, 0.50),
+  seed      = 42
+)
+table(df2$batch)
+#> 
+#> batch1 batch2 batch3 batch4 
+#>    100    100    100    100 
+
+# Spike-and-slab model: batch 1 is a clean reference; each other batch
+# perturbs ~20% of features. Unequal batch sizes via `proportions`.
+df3 <- add_batch_effect(
+  df,
+  n_batches   = 4,
+  shifts      = "spike_slab",
+  shift_prob  = 0.2,
+  shift_sd    = 0.5,
+  proportions = c(0.4, 0.3, 0.2, 0.1),
+  seed        = 42
+)
+attr(df3, "batch_effect")$shift_matrix
+#>        x y z
+#> batch1 0 0 0
+#> batch2 0 0 0
+#> batch3 0 0 0
+#> batch4 0 0 0
+```

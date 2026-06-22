@@ -1,0 +1,229 @@
+# Simulate a synthetic dataset preserving marginals and joint correlations
+
+Generate a synthetic copy of a mixed-type tabular dataset via a Gaussian
+copula. The per-column marginals (means, SDs, level frequencies,
+missingness rate) and the joint correlation structure of the input are
+preserved without retaining row-level information. Optionally inject
+synthetic phenotype columns with a user-specified marginal and effect
+size on a chosen subset of features.
+
+## Usage
+
+``` r
+simulate_dataset(
+  data,
+  n = nrow(data),
+  col_types = NULL,
+  marginal_resolution = 128L,
+  missingness = c("preserve_pattern", "MCAR", "none"),
+  inject = NULL,
+  copula_regularization = "nearPD",
+  privacy = list(min_cell_size = 10L, noise_on_corr = 0, drop_near_constant = TRUE,
+    max_missingness = 0.9, force = FALSE),
+  seed = NULL,
+  verbose = TRUE,
+  stratify_by = NULL,
+  min_strata_n = 30L,
+  max_ordinal_levels = 10L
+)
+```
+
+## Arguments
+
+- data:
+
+  A \`data.frame\` or numeric \`matrix\`. Samples in rows, features in
+  columns. Mixed types allowed: numeric (quantitative or binary),
+  logical, factor, character.
+
+- n:
+
+  Integer, the number of rows in the simulated output. Defaults to
+  \`nrow(data)\`.
+
+- col_types:
+
+  Optional named list overriding the auto-detected column types. Each
+  entry must be one of \`"quantitative"\`, \`"integer"\`, \`"binary"\`,
+  or \`"categorical"\`. Whole-number columns are auto-detected as
+  \`"integer"\`; override to \`"quantitative"\` to keep a fractional
+  (float) representation.
+
+- marginal_resolution:
+
+  Integer, the number of quantile knots used to represent each
+  quantitative column's marginal CDF. Default 128. Storing a quantile
+  grid (rather than the raw vector) is the privacy guarantee for
+  continuous columns.
+
+- missingness:
+
+  One of \`"preserve_pattern"\` (default), \`"MCAR"\`, or \`"none"\`.
+  With \`"preserve_pattern"\`, the NA-indicator matrix is modeled by a
+  second Gaussian copula so that co-missing variables stay co-missing.
+
+- inject:
+
+  Optional named list of phenotype specifications (phenotype injection).
+  See \*\*Details\*\* and \*\*Examples\*\*.
+
+- copula_regularization:
+
+  Currently unused; reserved for alternate PD-projection strategies. The
+  default is \`Matrix::nearPD()\` via \`"nearPD"\`.
+
+- privacy:
+
+  A list of privacy knobs: \* \`min_cell_size\` (default 10):
+  categorical levels with fewer than this many observations are
+  collapsed into \`"other"\`. Below 5 requires \`force = TRUE\` and
+  emits a warning. \* \`drop_near_constant\` (default \`TRUE\`): drop
+  columns with fewer than 2 distinct non-NA values. \*
+  \`max_missingness\` (default 0.90): drop columns with missingness rate
+  above this threshold (they cannot be faithfully simulated in their
+  extreme tail and are a re-identification risk). \* \`noise_on_corr\`
+  (default 0): standard deviation of Gaussian noise added to
+  off-diagonals of the latent correlation matrix. Positive values give a
+  differential-privacy-flavored guarantee; 0 means none. \* \`force\`
+  (default \`FALSE\`): set \`TRUE\` to override the \`min_cell_size \<
+  5\` safety check.
+
+- seed:
+
+  Optional integer. When non-\`NULL\`, seeds the (PIT jitter, phenotype
+  injection, MVN draw, missingness mask) stages independently so the
+  output is reproducible. The global RNG is not touched if \`NULL\`.
+
+- verbose:
+
+  If \`TRUE\` (default), prints progress and a privacy-audit line
+  summarising what was dropped or collapsed.
+
+- stratify_by:
+
+  Optional character of length 1 naming a column to stratify on. When
+  set, the simulator fits a separate copula within each level of that
+  column and concatenates the per-stratum sims, preserving within-group
+  joint distributions that a single copula would average away. Useful
+  when a categorical column drives big mean shifts in continuous columns
+  (e.g., \`Species\` in \`iris\`). Cannot be combined with \`inject\` in
+  this version.
+
+- min_strata_n:
+
+  Integer minimum number of rows required per stratum for fitting.
+  Strata below this are skipped with a warning. Default 30.
+
+- max_ordinal_levels:
+
+  Integer, default 10. An \`"integer"\` column with at most this many
+  distinct values (and every value occurring at least \`min_cell_size\`
+  times) is modeled as an ordinal trait with exact level frequencies;
+  otherwise it uses the quantile grid and is rounded to the nearest
+  integer on output. Either way the output is integer-typed.
+
+## Value
+
+An object of class \`"synthetica_sim"\` (a list) with elements: \*
+\`data\` – the synthetic \`data.frame\` (n x p) \* \`marginals\` –
+fitted marginals, one per column \* \`corr\` – the projected latent
+correlation matrix \* \`missingness\` – missingness fit (rates and, if
+applicable, latent copula) \* \`inject_truth\` – per-phenotype
+bookkeeping (\`NULL\` when no phenotype is injected) \*
+\`dropped_cols\`, \`dropped_near_constant\`, \`dropped_high_missing\` –
+audit trail of guardrail actions \* \`audit\` – one-line summary string
+of guardrail actions \* \`call\` – the matched call
+
+## Details
+
+\*\*Method.\*\* The simulator fits a per-column marginal (empirical
+quantile grid for quantitative columns; level proportions for binary and
+categorical) and then maps each observation to a standard normal via the
+probability integral transform (continuity-corrected for discrete
+variables). Pairwise-complete Pearson correlation of the latent scores
+is projected to the nearest positive-definite correlation matrix
+(\`Matrix::nearPD()\`). Synthetic rows are drawn from \`MVN(0, R)\` and
+back-transformed column-wise through the stored marginals. Missingness
+is modeled by a second Gaussian copula on the NA-indicator matrix.
+
+\*\*Phenotype injection.\*\* Each entry of \`inject\` is a list with
+fields: \* \`type\` – \`"quantitative"\`, \`"binary"\`, or
+\`"categorical"\` \* \`mean\`, \`sd\` (quantitative); \`prob\` (binary);
+\*\*or\*\* \`levels\` (character, length \>= 2) and \`probs\`
+(proportions, same length, all \> 0, summing to 1) for \`"categorical"\`
+\* \`effect = list(kind, ..., on)\` where \`kind\` is \`"mean_shift"\`
+(then \`size_sd\` gives the standardized effect) or \`"r_squared"\`
+(then \`min_r2\` gives the target R^2 on the latent scale), and \`on\`
+is one of \`"all"\`, a numeric fraction in \`(0, 1\]\` selecting a
+random subset of target features, or a character vector of feature
+names. Categorical phenotypes support only \`kind = "r_squared"\` in
+this version.
+
+Phenotypes are generated on the rank-standardized latent scale and
+back-transformed to the user-facing marginal. The feasibility of the
+requested effect is enforced (\`rho' R_X^-1 rho \<= 1\`); on violation,
+the targets are scaled down and a warning is emitted.
+
+A \`"categorical"\` phenotype is an \*\*ordinal\*\* trait: a single
+latent is correlated with the targets and cut at the
+cumulative-probability thresholds of \`probs\` into ordered \`levels\`
+(the first level is the low end of the gradient). Binary is the
+two-level special case. Because thresholding attenuates the latent
+correlation, the realized per-target Spearman association is reported
+empirically in \`inject_truth\$\<name\>\$realized_cor\`.
+
+\*\*Binary fidelity.\*\* Injected binary (and categorical/continuous)
+phenotypes have their generating latent spliced into the copula, so the
+designed latent correlation is captured exactly; only the single,
+unavoidable thresholding factor \`phi(c) / sqrt(p(1-p))\` remains for
+binaries, reported as \`inject_truth\$\<name\>\$binary_sim_factor\`.
+Input ordered-discrete columns have their latent correlations recovered
+so associations are preserved rather than attenuated on the round-trip:
+binary-like columns (a numeric 0/1 column or a two-level factor such as
+M/F) via tetrachoric / biserial, and ordered multi-level columns
+(ordinal-mode integers, ordered factors) via polychoric / polyserial.
+These recoveries assume a thresholded bivariate-normal latent.
+
+\*\*Limitations.\*\* Categorical phenotype injection is ordinal; for a
+nominal grouping factor whose levels perturb different features
+independently, use \[add_group_effect()\] (a post-processor). Unordered
+(\>2-level) categorical \*input\* columns are not polychoric-corrected
+(no inherent order), and categorical input features are not supported as
+effect targets in this version.
+
+## Examples
+
+``` r
+set.seed(1)
+input <- data.frame(
+  x   = rnorm(200, 50, 10),
+  y   = rlnorm(200, log(20), 0.5),
+  sex = sample(c(0L, 1L), 200, replace = TRUE),
+  grp = factor(sample(letters[1:3], 200, replace = TRUE))
+)
+input$x[sample(200, 30)] <- NA
+
+# Baseline simulation: synthetic copy
+sim <- simulate_dataset(input, n = 500, seed = 42, verbose = FALSE)
+str(sim$data)
+#> 'data.frame':    500 obs. of  4 variables:
+#>  $ x  : num  47.9 45.5 43.2 42.5 NA ...
+#>  $ y  : num  22.8 13.4 18.5 18.9 14.4 ...
+#>  $ sex: int  1 1 1 0 1 1 0 1 0 1 ...
+#>  $ grp: Factor w/ 3 levels "a","b","c": 2 1 2 3 1 2 3 2 3 2 ...
+
+# Phenotype injection: a synthetic age column correlated with all features
+sim2 <- simulate_dataset(
+  input,
+  n = 500, seed = 42, verbose = FALSE,
+  inject = list(
+    age = list(
+      type = "quantitative", mean = 55, sd = 12,
+      effect = list(kind = "mean_shift", size_sd = 0.2, on = "all")
+    )
+  )
+)
+#> Warning: phenotype 'age': dropped 1 categorical target(s) -- not supported as effect targets in v1
+sim2$inject_truth$age$mean_abs_real_cor
+#> [1] 0.1681992
+```

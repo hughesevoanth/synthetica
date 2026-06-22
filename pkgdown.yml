@@ -1,0 +1,12 @@
+pandoc: 3.8.3
+pkgdown: 2.2.0
+pkgdown_sha: ~
+articles:
+  effects: effects.html
+  intro: intro.html
+  longitudinal: longitudinal.html
+  phenotypes: phenotypes.html
+last_built: 2026-06-22T02:21Z
+urls:
+  reference: https://hughesevoanth.github.io/synthetica/reference
+  article: https://hughesevoanth.github.io/synthetica/articles
